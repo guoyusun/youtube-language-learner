@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinguaTube · YouTube 外语字幕提取与单句复读学习台</title>
+  <link rel="stylesheet" href="/styles.css?v=2" />
+</head>
+<body>
+  <!-- Top Header & URL Input -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-logo">🎧</div>
+      <div>
+        <h1 class="brand-title">LinguaTube</h1>
+        <p class="brand-subtitle">YouTube 字幕自动提取 · 点击跳转 · 单句循环跟读</p>
+      </div>
+    </div>
+
+    <form id="url-form" class="url-bar">
+      <div class="input-wrapper">
+        <span class="input-icon">🔗</span>
+        <input
+          type="text"
+          id="youtube-url-input"
+          placeholder="粘贴 YouTube 视频或 Shorts 链接，例如 https://www.youtube.com/shorts/_hgYfOs9rbs"
+          value="https://www.youtube.com/shorts/_hgYfOs9rbs"
+          autocomplete="off"
+        />
+        <button type="button" id="clear-url-btn" class="icon-btn" title="清空链接">✕</button>
+      </div>
+      <button type="submit" id="load-btn" class="primary-btn">
+        <span>提取字幕并加载</span>
+      </button>
+    </form>
+
+    <div class="header-actions">
+      <button type="button" id="aspect-toggle-btn" class="secondary-btn" title="切换竖屏 Shorts / 横屏宽屏布局">
+        📱 竖屏 Shorts 视图
+      </button>
+      <button type="button" id="vocab-drawer-btn" class="secondary-btn">
+        📒 生词与重点句 (<span id="saved-count">0</span>)
+      </button>
+    </div>
+  </header>
+
+  <!-- Status / Error Banner -->
+  <div id="status-banner" class="status-banner hidden"></div>
+
+  <!-- Main Workspace -->
+  <main class="workspace" id="workspace">
+    <!-- Left Column: Video Player + Active Sentence Shadowing Deck -->
+    <section class="player-column">
+      <div class="video-card">
+        <div class="video-meta-bar">
+          <div class="video-title-wrap">
+            <span class="badge" id="video-type-badge">Shorts</span>
+            <h2 id="video-title">正在准备加载视频与字幕...</h2>
+          </div>
+          <span id="video-author" class="video-author"></span>
+        </div>
+
+        <div id="player-container" class="player-container shorts-aspect">
+          <div id="yt-player"></div>
+        </div>
+
+        <!-- Active Subtitle Spotlight Card -->
+        <div class="active-caption-box" id="active-caption-box">
+          <div class="active-caption-header">
+            <span class="active-index-badge" id="active-index-badge"># - / -</span>
+            <span class="active-time-badge" id="active-time-badge">00:00.0 - 00:00.0</span>
+            <span class="loop-status-pill hidden" id="loop-status-pill">🔁 单句循环中</span>
+            <div class="caption-quick-tools">
+              <button type="button" id="spot-toggle-orig-btn" class="mini-tool-btn active-toggle" title="显示/遮盖原文字幕，方便看着译文回译复述 (快捷键 O)">
+                👁️ 原文: 显
+              </button>
+              <button type="button" id="spot-toggle-trans-btn" class="mini-tool-btn active-toggle" title="显示/遮盖译文字幕，方便纯原文跟读 (快捷键 T)">
+                👁️ 译文: 显
+              </button>
+              <button type="button" id="save-current-sentence-btn" class="mini-tool-btn" title="收藏当前句子到笔记本">
+                ⭐ 收藏本句
+              </button>
+            </div>
+          </div>
+
+          <div id="active-primary-text" class="active-primary-text">
+            点击任意字幕行即可跳转到对应时间点播放，点击单词可发音与查词
+          </div>
+          <div id="active-translated-text" class="active-translated-text hidden"></div>
+        </div>
+
+        <!-- Shadowing & Single-Sentence Loop Controls -->
+        <div class="control-deck">
+          <div class="transport-row">
+            <button type="button" id="prev-sub-btn" class="deck-btn" title="上一句 (快捷键 ← 或 A)">
+              ⏮ 上一句
+            </button>
+            <button type="button" id="replay-sub-btn" class="deck-btn" title="从头重播本句 (快捷键 S)">
+              ↺ 重播本句
+            </button>
+            <button type="button" id="play-pause-btn" class="deck-btn primary-deck-btn" title="播放 / 暂停 (快捷键 Space)">
+              ⏯ 播放 / 暂停
+            </button>
+            <button type="button" id="next-sub-btn" class="deck-btn" title="下一句 (快捷键 → 或 D)">
+              下一句 ⏭
+            </button>
+            <button type="button" id="loop-toggle-btn" class="deck-btn loop-btn" title="开启/关闭单句循环复读 (快捷键 L 或 R)">
+              🔁 单句循环: 关
+            </button>
+          </div>
+
+          <div class="shadowing-settings-row">
+            <div class="setting-group">
+              <label for="loop-count-select">复读策略:</label>
+              <select id="loop-count-select">
+                <option value="0" selected>∞ 无限单句循环</option>
+                <option value="2">2遍后自动下一句</option>
+                <option value="3">3遍后自动下一句</option>
+                <option value="5">5遍后自动下一句</option>
+              </select>
+            </div>
+
+            <div class="setting-group">
+              <label for="shadow-pause-select">跟读留白:</label>
+              <select id="shadow-pause-select" title="每句播放结束时自动暂停留出跟读时间，然后再下一遍循环">
+                <option value="0" selected>不留白 (0秒)</option>
+                <option value="1.5">句末停顿 1.5 秒</option>
+                <option value="3">句末停顿 3.0 秒</option>
+                <option value="auto">按原句时长 1:1 留白</option>
+              </select>
+            </div>
+
+            <div class="setting-group">
+              <label for="speed-select">播放倍速:</label>
+              <select id="speed-select">
+                <option value="0.5">0.5x 慢速</option>
+                <option value="0.75">0.75x 精听</option>
+                <option value="0.9">0.9x 跟读</option>
+                <option value="1" selected>1.0x 原速</option>
+                <option value="1.25">1.25x 进阶</option>
+                <option value="1.5">1.5x 快速</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="shortcut-hints">
+            <span>快捷键：</span>
+            <kbd>Space</kbd> 播放/暂停
+            <kbd>←</kbd><kbd>→</kbd> 上/下一句
+            <kbd>S</kbd> 重播本句
+            <kbd>L</kbd> 单句循环
+            <kbd>O</kbd> 显隐原文
+            <kbd>T</kbd> 显隐译文
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Interactive Subtitle Transcript Panel -->
+    <section class="transcript-column">
+      <div class="transcript-card">
+        <!-- Transcript Toolbar -->
+        <div class="transcript-toolbar">
+          <div class="toolbar-top">
+            <div class="lang-selectors">
+              <div class="setting-group">
+                <label for="track-select">原文字幕:</label>
+                <select id="track-select">
+                  <option value="">自动检测</option>
+                </select>
+              </div>
+
+              <div class="setting-group">
+                <label for="translate-select">双语对照:</label>
+                <select id="translate-select">
+                  <option value="zh-Hans" selected>中文 (简体)</option>
+                  <option value="">不显示翻译</option>
+                  <option value="zh-Hant">中文 (繁體)</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="es">Español</option>
+                  <option value="fr">Français</option>
+                </select>
+              </div>
+
+              <div class="setting-group">
+                <label for="seg-mode-select">断句模式:</label>
+                <select id="seg-mode-select" title="智能完整长句会利用词级时间戳拼合完整句子与问答对，避免长句切碎">
+                  <option value="sentence" selected>智能完整长句 (推荐跟读)</option>
+                  <option value="clause">标准按标点断句</option>
+                  <option value="raw">原始碎片时间轴</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="toolbar-right-btns">
+              <button
+                type="button"
+                id="toggle-orig-btn"
+                class="vis-toggle-btn active"
+                title="点击切换显示/隐藏原文（隐藏后可看着译文练习英文复述，鼠标悬停可临时查看原文，快捷键 O）"
+              >
+                👁️ 显示原文
+              </button>
+              <button
+                type="button"
+                id="toggle-trans-btn"
+                class="vis-toggle-btn active"
+                title="点击切换显示/隐藏译文（隐藏后可专注看英文原文复述，鼠标悬停可临时查看译文，快捷键 T）"
+              >
+                👁️ 显示译文
+              </button>
+
+              <label class="checkbox-pill" title="播放时自动滚动字幕列表到当前句">
+                <input type="checkbox" id="autoscroll-checkbox" checked />
+                <span>自动跟随</span>
+              </label>
+
+              <div class="dropdown">
+                <button type="button" id="export-menu-btn" class="secondary-btn small-btn">
+                  📥 导出 / 复制字幕 ▾
+                </button>
+                <div id="export-dropdown" class="dropdown-menu hidden">
+                  <button type="button" data-export="copy-plain">📋 复制纯文本字幕</button>
+                  <button type="button" data-export="copy-timestamp">🕒 复制带时间戳字幕</button>
+                  <button type="button" data-export="copy-bilingual">🌐 复制双语对照文本</button>
+                  <button type="button" data-export="download-srt">💾 下载 .SRT 字幕文件</button>
+                  <button type="button" data-export="download-md">📝 下载 Markdown 学习笔记</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="toolbar-search-row">
+            <input
+              type="search"
+              id="subtitle-search-input"
+              placeholder="🔍 在字幕中搜索单词或短语..."
+            />
+            <span id="subtitle-stats" class="subtitle-stats">共 0 句</span>
+          </div>
+        </div>
+
+        <!-- Subtitle List Container -->
+        <div id="subtitle-list" class="subtitle-list">
+          <div class="empty-state">
+            <div class="spinner"></div>
+            <p>正在从 YouTube 提取字幕轨道，请稍候...</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Word Lookup Popover -->
+  <div id="word-popover" class="word-popover hidden">
+    <div class="popover-header">
+      <strong id="popover-word" class="popover-word">word</strong>
+      <div class="popover-actions">
+        <button type="button" id="speak-word-btn" class="mini-tool-btn" title="发音朗读">🔊 朗读</button>
+        <button type="button" id="save-word-btn" class="mini-tool-btn" title="加入生词本">➕ 加入生词本</button>
+        <button type="button" id="close-popover-btn" class="icon-btn">✕</button>
+      </div>
+    </div>
+    <p id="popover-context" class="popover-context"></p>
+    <div class="popover-links">
+      <a id="dict-youdao" href="#" target="_blank" rel="noopener">有道词典</a>
+      <a id="dict-cambridge" href="#" target="_blank" rel="noopener">Cambridge</a>
+      <a id="dict-google" href="#" target="_blank" rel="noopener">Google 翻译</a>
+    </div>
+  </div>
+
+  <!-- Saved Vocabulary & Sentences Drawer -->
+  <aside id="vocab-drawer" class="vocab-drawer hidden">
+    <div class="drawer-header">
+      <h3>📒 我的外语生词与重点句</h3>
+      <div class="drawer-header-actions">
+        <button type="button" id="export-notes-btn" class="secondary-btn small-btn">📋 导出全部笔记</button>
+        <button type="button" id="close-drawer-btn" class="icon-btn">✕</button>
+      </div>
+    </div>
+    <div class="drawer-body">
+      <h4>🔤 收集的生词</h4>
+      <div id="saved-words-list" class="saved-list"></div>
+
+      <h4>⭐ 收藏的重点句 (点击可跳转复读)</h4>
+      <div id="saved-sentences-list" class="saved-list"></div>
+    </div>
+  </aside>
+
+  <!-- YouTube IFrame API & Application Script -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="/app.js?v=2"></script>
+</body>
+</html>
